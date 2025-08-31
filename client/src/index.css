@@ -1,0 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Outfit:wght@100..900&display=swap');
+@import "tailwindcss";
+
+:root {
+  --accent-orange: #ff880f;
+  --accent-orange-dark: #3f1c04;
+  --accent-green:  #16c965;
+  --accent-red:    #a14247;
+  --bg-app:        #111111;
+
+  --transition-theme: 180ms ease;
+}
+
+
+
+*{
+    font-family: Outfit;
+    transition:
+    background-color var(--transition-theme),
+    color var(--transition-theme),
+    border-color var(--transition-theme);
+}
+
+.placeholer-color{
+    color: #e0e0e0;
+    font-weight: 300;
+}
