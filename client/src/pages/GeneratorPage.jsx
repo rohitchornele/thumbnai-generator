@@ -14,6 +14,8 @@ const GeneratorPage = () => {
   const [size, setSize] = useState("1024x1024");
   const [strength, setStrength] = useState(60);
 
+  const [fileName, setFileName] = useState("")
+
   const [file, setFile] = useState(null);
 
   const { generateThumbnail, uploadToCloudinary, user } = useContext(AppContext);
@@ -49,6 +51,7 @@ const GeneratorPage = () => {
     try {
       let cloudinaryPublicId = null;
       if (file) {
+        console.log("Filename: ", file.name)
         const up = await uploadToCloudinary(file, { folder: `temp` }); // or `users/${userId}`
         cloudinaryPublicId = up.public_id;
         console.log("CLD ID = ", cloudinaryPublicId);
