@@ -1,164 +1,123 @@
-// controllers/generate.controller.js
-import sharp from "sharp";
-import { GoogleGenAI } from "@google/genai";
 import userModel from "../models/userModel.js";
+import OpenAI from "openai";
+import "dotenv/config";
+import { getUploadSignature } from "../config/cloudinary.js";
+import { v2 as cloudinary } from "cloudinary";
 
-// Initialize Gemini client
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
+});
 
-// Helper: fetch original bytes from Cloudinary with deterministic format
-async function fetchCloudinaryOriginal(publicId) {
+const client = new OpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: process.env.OPENROUTER_BASE_URL,
+});
+
+function buildCloudinaryUrl(publicId) {
   const cloud = process.env.CLOUDINARY_CLOUD_NAME;
-  
-  // Try multiple formats with proper MIME type mapping
-  const formats = [
-    { format: 'jpg', mime: 'image/jpeg', ext: 'jpg' },
-    { format: 'png', mime: 'image/png', ext: 'png' },
-    { format: 'webp', mime: 'image/webp', ext: 'webp' }
-  ];
-  
-  let lastError;
-  
-  for (const { format, mime, ext } of formats) {
-    try {
-      const url = `https://res.cloudinary.com/${cloud}/image/upload/f_${format}/${publicId}.${ext}`;
-      
-      console.log(`Trying to fetch: ${url}`);
-      
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const arrayBuf = await resp.arrayBuffer();
-        
-        // Use the format-specific MIME type we know is correct
-        const mimeType = mime;
-        const filename = `${publicId}.${ext}`;
-        
-        // console.log(`Successfully fetched ${format} format:`, { 
-        //   mimeType, 
-        //   filename, 
-        //   size: arrayBuf.byteLength,
-        //   actualContentType: resp.headers.get("content-type")
-        // });
-        
-        return { 
-          buffer: Buffer.from(arrayBuf), 
-          mimeType, 
-          filename 
-        };
-      } else {
-        console.log(`HTTP ${resp.status} for ${format} format`);
-      }
-    } catch (error) {
-      lastError = error;
-      console.log(`Failed to fetch ${format} format:`, error.message);
-    }
-  }
-  
-  throw new Error(`Failed to fetch Cloudinary asset in any format. Last error: ${lastError?.message}`);
+  return `https://res.cloudinary.com/${cloud}/image/upload/b_brown,c_pad,h_720,w_1280/${publicId}`;
 }
 
+
 async function handleGenerateFromCloudinary({ prompt, publicId }) {
-  try {
-    // 1) Load image bytes and reliable MIME/filename
-    const { buffer: inBuf, mimeType, filename } = await fetchCloudinaryOriginal(publicId);
+  
+  const cloudinaryUrl = buildCloudinaryUrl(publicId);
 
-    // console.log("Uploading to Gemini:", { mimeType, filename, size: inBuf.length });
+  // const instruction = `Return exactly one data URL (data:image/png;base64,...) with no extra text or code fences.`;
 
-    // 2) Upload to Gemini Files API with explicit type and name
-    const file = await ai.files.upload({
-      file: inBuf,
-      filename,
-      config: { mimeType: "image/jpeg" }
-    });
+  const response = await client.chat.completions.create({
+    model: "google/gemini-2.5-flash-image-preview:free",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a helpful AI image generation and editing assistant who helps in generating images and edit them as per the user's instruction.",
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `${prompt}`,
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: cloudinaryUrl,
+            },
+          },
+        ],
+      },
+    ],
+  });
 
-    console.log("Gemini file uploaded:", { uri: file.uri, mimeType: file.mimeType });
+  const content = response.choices[0].message?.images?.[0]?.image_url?.url || "";
+  console.log("Content = ", content.slice(0,1000))
 
-    // 3) Generate with the uploaded file reference
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-image-preview",
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: prompt },
-            { fileUri: file.uri, mimeType: file.mimeType },
-          ],
-        },
-      ],
-    });
+  return content;
+}
 
-    // 4) Extract first image part
-    const parts = response?.candidates?.[0]?.content?.parts || [];
-    const imgPart = parts.find((p) => p.inlineData?.data);
-    
-    if (!imgPart) {
-      const textResponse = parts.find((p) => p.text)?.text || "No image data in response";
-      throw new Error(`No image generated. Response: ${textResponse}`);
-    }
 
-    // 5) Normalize to PNG and optional size
-    const rawOut = Buffer.from(imgPart.inlineData.data, 'base64');
-    const png = await sharp(rawOut).png().toBuffer();
-
-    return png;
-  } catch (error) {
-    console.error("Error in handleGenerateFromCloudinary:", error);
-    throw error;
-  }
+async function uploadDataUrlToCloudinary(dataUrl, folder = "generated") {
+  // Cloudinary supports base64 data URIs in upload API
+  const res = await cloudinary.v2.uploader.upload(dataUrl, {
+    folder,
+    overwrite: true,
+  });
+  return res.secure_url;
 }
 
 export const generateThumbnail = async (req, res) => {
   try {
     const { userId } = req;
     const { prompt, cloudinaryPublicId } = req.body;
-
-    // Input validation
-    if (!userId || !prompt || !cloudinaryPublicId) {
-      return res.json({ 
-        success: false, 
-        message: "Missing required fields: userId, prompt, or cloudinaryPublicId" 
-      });
-    }
+    console.log("body = ", req.body);
 
     const user = await userModel.findById(userId);
-    if (!user) {
-      return res.json({ success: false, message: "User not found" });
-    }
 
-    if (!user.creditBalance || user.creditBalance <= 0) {
+    console.log("User = ", user);
+    console.log("prompt = ", prompt);
+    // console.log("cloudinaryPublicId = ", cloudinaryPublicId);
+
+    if (!user || !prompt) {
       return res.json({
         success: false,
-        message: "Insufficient credit balance",
-        creditBalance: user.creditBalance || 0,
+        message: "Missing Details",
       });
     }
 
-    console.log("Processing request:", { userId, prompt, cloudinaryPublicId });
+    if (user.creditBalance === 0 || user.creditBalance < 0) {
+      return res.json({
+        success: false,
+        message: "No Credit Balance",
+        creditBalance: user.creditBalance,
+      });
+    }
 
-    const bytes = await handleGenerateFromCloudinary({
+    const base_64_url = await handleGenerateFromCloudinary({
       prompt,
       publicId: cloudinaryPublicId,
     });
 
-    const base64Image = bytes.toString("base64");
-    const resultImage = `data:image/png;base64,${base64Image}`;
+    console.log("image url.... = ", base_64_url.slice(0,1000));
 
-    // Update user credits
+    // const base64Image = bytes.toString("base64");
+    const resultImage = `${base_64_url}`;
+
     await userModel.findByIdAndUpdate(user._id, {
       creditBalance: user.creditBalance - 1,
     });
 
     return res.json({
       success: true,
-      message: "Image generated successfully",
+      message: "Image Generated",
       creditBalance: user.creditBalance - 1,
       resultImage,
     });
   } catch (error) {
-    console.error("Generate API error:", error);
-    return res.json({ 
-      success: false, 
-      message: error.message || "Failed to generate image"
-    });
+    throw new Error(`Error in controller : ${error}`);
   }
 };

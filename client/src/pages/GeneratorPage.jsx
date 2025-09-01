@@ -16,9 +16,11 @@ const GeneratorPage = () => {
 
   const [file, setFile] = useState(null);
 
-  const { generateThumbnail, uploadToCloudinary } = useContext(AppContext);
+  const { generateThumbnail, uploadToCloudinary, user } = useContext(AppContext);
 
+ 
   const onFileChange = (e) => {
+     console.log("user = ", user)
     const f = e.target.files?.[0];
     if (!f || !f.type.startsWith("image/")) return;
     setFile(f);
@@ -32,30 +34,7 @@ const GeneratorPage = () => {
     reader.readAsDataURL(f); // preview only
   };
 
-  async function uploadViaPresigned(file) {
-    // 1) ask backend for a presigned URL
-    const meta = { filename: file.name, type: file.type, size: file.size };
-    const r = await fetch("/api/uploads/presign", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(meta),
-    });
-    if (!r.ok) throw new Error("Failed to get upload URL");
-    const { url, key, contentType } = await r.json();
-
-    // 2) PUT the raw bytes to storage
-    const put = await fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": contentType || file.type },
-      body: file, // Blob/File directly
-    });
-    if (!put.ok) throw new Error("Upload failed");
-
-    // 3) return the object key to send to backend
-    return { key };
-  }
-
-  const onReset = () => {
+   const onReset = () => {
     setPrompt("");
     setStrength(60);
     setModel("image-edit-v1");
@@ -70,11 +49,12 @@ const GeneratorPage = () => {
     try {
       let cloudinaryPublicId = null;
       if (file) {
-        const up = await uploadToCloudinary(file, { folder: "temp" }); // or `users/${userId}`
+        const up = await uploadToCloudinary(file, { folder: `temp` }); // or `users/${userId}`
         cloudinaryPublicId = up.public_id;
+        console.log("CLD ID = ", cloudinaryPublicId);
       }
       // AppContext.generateThumbnail should accept { prompt, imageKey, model, size, strength }
-      const img = await generateThumbnail({ prompt, cloudinaryPublicId, model, size, strength });
+      const img = await generateThumbnail({ prompt, cloudinaryPublicId});
       if (img) setResultImage(img);
     } catch (err) {
       console.error(err);
