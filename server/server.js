@@ -12,21 +12,7 @@ const PORT = process.env.PORT || 4000 ;
 const app = express();
 
 app.use(express.json())
-
-const allowedOrigin = process.env.CORS_ORIGIN;
-app.use(cors({
-    origin: allowedOrigin,            
-    methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-    allowedHeaders: ["Content-Type","Authorization"],
-    credentials: true, 
-}));
-
-// app.options("*", cors({
-//   origin: allowedOrigin,
-//   methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-//   allowedHeaders: ["Content-Type","Authorization"],
-//   credentials: true,
-// }));
+app.use(cors());
 
 await connectDb();
 
