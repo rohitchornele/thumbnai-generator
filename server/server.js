@@ -8,18 +8,19 @@ import thumbnailRouter from "./routes/thumbnailRoutes.js";
 import cloudinaryRouter from "./routes/cloudinaryRoutes.js";
 
 
-const corsOptions = {
-            origin: 'https://thumbnai-generator-yt.vercel.app', 
-            methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-            credentials: true, 
-            optionsSuccessStatus: 200
-        };
 
 const PORT = process.env.PORT || 4000 ;
 const app = express();
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use(cors());
+
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', 'https://thumbnai-generator-yt.vercel.app');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    next();
+});
 
 app.use(express.json())
 
