@@ -8,11 +8,18 @@ import thumbnailRouter from "./routes/thumbnailRoutes.js";
 import cloudinaryRouter from "./routes/cloudinaryRoutes.js";
 
 
+const corsOptions = {
+            origin: 'https://thumbnai-generator-yt.vercel.app', 
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+            credentials: true, 
+            optionsSuccessStatus: 200
+        };
+
 const PORT = process.env.PORT || 4000 ;
 const app = express();
 
+app.use(cors(corsOptions));
 app.use(express.json())
-app.use(cors());
 
 await connectDb();
 
